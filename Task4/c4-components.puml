@@ -1,0 +1,28 @@
+@startuml c4-components
+!include <C4/C4_Component>
+
+title Схема компонентов (третий уровень) — Депозитный сервис: раздача актуальных ставок
+
+Container_Ext(broker, "Брокер сообщений", "Apache Kafka", "Актуальные ставки из АБС")
+System_Ext(cc, "Система кол-центра банка", "Java Spring Boot")
+System(sftp, "SFTP-сервер обмена файлами", "Выгрузка файлов ставок")
+System_Ext(partner_cc, "Партнёрский кол-центр", "Внешняя ИС, без API")
+
+Container_Boundary(ds, "Депозитный сервис") {
+  Component(kafka_consumer, "Консьюмер ставок", "Spring Kafka", "Получает актуальные ставки из АБС и обновляет read-model")
+  ComponentDb(read_model, "Read-model ставок", "PostgreSQL + Spring Data", "Актуальные ставки для быстрого доступа")
+  Component(rates_api, "Rates API", "Spring REST", "Отдаёт актуальные ставки по запросу (кол-центр банка, ИБ, сайт)")
+  Component(file_exporter, "Экспортёр файла ставок", "Spring Scheduler + SFTP-клиент", "Ежедневно формирует файл (CSV) и кладёт его на SFTP-сервер")
+}
+
+Rel(broker, kafka_consumer, "Актуальные ставки", "Kafka")
+Rel(kafka_consumer, read_model, "Обновляет ставки", "JDBC")
+Rel(rates_api, read_model, "Читает актуальные ставки", "JDBC")
+Rel(cc, rates_api, "Запрос актуальных ставок", "REST/HTTPS")
+
+Rel(file_exporter, read_model, "Читает актуальные ставки", "JDBC")
+Rel(file_exporter, sftp, "Формирует и публикует файл ставок", "SFTP")
+Rel(partner_cc, sftp, "Забирает файл ставок", "SFTP")
+
+SHOW_LEGEND()
+@enduml
