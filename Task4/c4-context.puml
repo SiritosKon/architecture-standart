@@ -1,0 +1,30 @@
+@startuml c4-context
+!include <C4/C4_Context>
+
+title Схема контекста (первый уровень) — Передача актуальных ставок в кол-центр
+
+Person(client, "Клиент", "Звонит уточнить условия и ставки по депозиту")
+Person(cc_operator, "Оператор кол-центра банка", "Консультирует клиента по актуальным ставкам")
+Person(partner_operator, "Оператор партнёрского кол-центра", "Консультирует клиента по актуальным ставкам")
+Person(bo, "Сотрудники бэк-офиса (депозиты/кредиты)", "Ведут справочник ставок, обновляется ежедневно")
+
+System(abs, "АБС", "Единый справочник ставок — источник истины (Oracle, PL/SQL)")
+System(deposit_svc, "Депозитный сервис", "Единый источник актуальных ставок (read-model). Java Spring Boot, PostgreSQL, Kafka")
+System(cc, "Система кол-центра банка", "React, Java Spring Boot, PostgreSQL")
+System(sftp, "SFTP-сервер обмена файлами", "Площадка для выгрузки файлов ставок")
+System_Ext(partner_cc, "Партнёрский кол-центр", "Внешняя ИС. Без API, только приём файлов")
+
+Rel(bo, abs, "Ведут справочник ставок (ежедневно)")
+Rel(abs, deposit_svc, "Публикует актуальные ставки", "Kafka, async")
+
+Rel(client, cc_operator, "Звонит, уточняет ставки")
+Rel(cc_operator, cc, "Смотрит актуальные ставки")
+Rel(cc, deposit_svc, "Получает актуальные ставки", "REST/HTTPS")
+
+Rel(deposit_svc, sftp, "Ежедневно выгружает файл ставок", "SFTP")
+Rel(partner_cc, sftp, "Забирает файл ставок", "SFTP")
+Rel(client, partner_operator, "Звонит, уточняет ставки")
+Rel(partner_operator, partner_cc, "Смотрит актуальные ставки")
+
+SHOW_LEGEND()
+@enduml

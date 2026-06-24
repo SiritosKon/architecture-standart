@@ -1,0 +1,55 @@
+@startuml c4-containers
+!include <C4/C4_Container>
+
+title Схема контейнеров (второй уровень) — Открытие депозитов онлайн (MVP). Детализация интернет-банка и АБС
+
+Person(client, "Клиент банка", "Авторизованный пользователь ИБ")
+Person(bo, "Сотрудники бэк-офиса", "Депозиты и кредиты")
+
+System_Ext(site, "Сайт банка", "PHP, React")
+System_Ext(cc, "Система кол-центра", "React, Java Spring Boot, PostgreSQL")
+System_Ext(sms, "СМС-шлюз", "Отправка СМС")
+
+System_Boundary(ib_b, "Интернет-банк (существующий, ядро не трогаем)") {
+  Container(ib_web, "Веб-приложение ИБ", "ASP.NET MVC 4.5", "Монолит. Добавляется только раздел депозитов, вызывающий депозитный сервис")
+}
+
+System_Boundary(ds_b, "Депозитный сервис (новый — детализируем)") {
+  Container(ds_api, "API заявок и витрины", "Java Spring Boot", "REST для ИБ, сайта и кол-центра: приём заявок, выдача ставок, коды подтверждения")
+  ContainerDb(ds_db, "БД сервиса", "PostgreSQL", "Заявки + read-model ставок (витрина для быстрого отклика)")
+  Container(ds_worker, "Интеграционный модуль", "Java, Kafka-клиент", "Публикует заявки; консьюмит ставки и статусы; шлёт уведомления")
+}
+
+Container(broker, "Брокер сообщений", "Apache Kafka", "Асинхронный обмен: заявки, статусы, актуальные ставки")
+
+System_Boundary(ns_b, "Сервис нотификаций (новый)") {
+  Container(notif, "Сервис нотификаций", "Java Spring Boot", "Отправляет СМС по запросу (получатель + текст/шаблон). Не знает про депозиты")
+}
+
+System_Boundary(abs_b, "АБС (существующая)") {
+  Container(abs_adapter, "Интеграционный адаптер", "Java, Kafka-клиент", "Новый компонент команды АБС: консьюмит заявки, пишет в Oracle, публикует ставки и статусы")
+  ContainerDb(abs_db, "СУБД АБС", "Oracle + PL/SQL", "Учёт, открытие депозитов, единый справочник ставок")
+}
+
+Rel(client, ib_web, "Каталог, ставки, подача заявки, свои депозиты", "HTTPS/TLS")
+Rel(ib_web, ds_api, "Витрина ставок, подача заявки", "REST/HTTPS")
+Rel(site, ds_api, "Актуальные ставки для витрины", "HTTPS/TLS")
+Rel(site, cc, "Заявка-лид", "HTTPS")
+Rel(cc, ds_api, "Обращение/заявка клиента на обработку", "REST/HTTPS")
+
+Rel(ds_api, ds_db, "Чтение/запись", "JDBC")
+Rel(ds_api, notif, "Запрос на отправку СМС с кодом подтверждения", "REST/HTTPS")
+Rel(ds_api, broker, "Публикует новые заявки", "Kafka")
+Rel(broker, ds_worker, "Статусы заявок, актуальные ставки", "Kafka")
+Rel(ds_worker, ds_db, "Обновляет read-model и статусы", "JDBC")
+Rel(ds_worker, notif, "Запрос на отправку уведомлений (ставка подтверждена / депозит открыт)", "REST/HTTPS")
+Rel(notif, sms, "Отправка СМС", "HTTPS")
+
+Rel(broker, abs_adapter, "Новые заявки на обработку", "Kafka")
+Rel(abs_adapter, broker, "Актуальные ставки, статусы заявок", "Kafka")
+Rel(abs_adapter, abs_db, "Запись заявок, чтение ставок и статусов", "PL/SQL")
+Rel(bo, abs_db, "Обработка заявок, открытие депозитов, ведение справочника ставок (через Delphi-клиент)")
+Rel_R(ib_web, abs_db, "Просмотр своих депозитов (существующая read-интеграция, legacy)", "SQL")
+
+SHOW_LEGEND()
+@enduml
